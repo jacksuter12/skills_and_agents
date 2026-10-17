@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How a Skill Loads</title>
+<style>
+  /* Tokens: copied from references/color-palette.md. Edit there first, then here. */
+  :root {
+    --primary-fill: #3b82f6;   --primary-stroke: #1e3a5f;
+    --secondary-fill: #60a5fa; --tertiary-fill: #93c5fd;
+    --start-fill: #fed7aa;     --start-stroke: #c2410c;
+    --end-fill: #a7f3d0;       --end-stroke: #047857;
+    --warning-fill: #fee2e2;   --warning-stroke: #dc2626;
+    --decision-fill: #fef3c7;  --decision-stroke: #b45309;
+    --ai-fill: #ddd6fe;        --ai-stroke: #6d28d9;
+    --inactive-fill: #dbeafe;  --inactive-stroke: #1e40af;
+    --error-fill: #fecaca;     --error-stroke: #b91c1c;
+    --text-title: #1e40af;     --text-subtitle: #3b82f6;
+    --text-body: #64748b;      --text-on-light: #374151;  --text-on-dark: #ffffff;
+    --code-bg: #1e293b;        --code-data: #22c55e;
+    --line: #64748b;           --canvas: #ffffff;
+    --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  }
+  body { margin: 0; padding: 32px; background: var(--canvas); font-family: var(--sans); }
+  svg#diagram { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+
+  /* Text hierarchy */
+  .t-title    { font: 600 26px var(--sans); fill: var(--text-title); }
+  .t-subtitle { font: 600 17px var(--sans); fill: var(--text-subtitle); }
+  .t-body     { font: 400 14px var(--sans); fill: var(--text-body); }
+  .t-label    { font: 500 15px var(--sans); fill: var(--text-on-light); }
+  .t-code     { font: 400 13px var(--mono); fill: #e2e8f0; }
+  .t-code tspan { white-space: pre; } /* keeps indentation inside a line, not the markup between lines */
+  .on-dark    { fill: var(--text-on-dark); }
+  .center     { text-anchor: middle; dominant-baseline: central; }
+
+  /* Semantic shapes: fill + darker stroke */
+  .s-primary  { fill: var(--primary-fill);  stroke: var(--primary-stroke);  stroke-width: 2; }
+  .s-secondary{ fill: var(--secondary-fill); stroke: var(--primary-stroke); stroke-width: 2; }
+  .s-tertiary { fill: var(--tertiary-fill); stroke: var(--primary-stroke); stroke-width: 2; }
+  .s-start    { fill: var(--start-fill);    stroke: var(--start-stroke);    stroke-width: 2; }
+  .s-end      { fill: var(--end-fill);      stroke: var(--end-stroke);      stroke-width: 2; }
+  .s-decision { fill: var(--decision-fill); stroke: var(--decision-stroke); stroke-width: 2; }
+  .s-ai       { fill: var(--ai-fill);       stroke: var(--ai-stroke);       stroke-width: 2; }
+  .s-warning  { fill: var(--warning-fill);  stroke: var(--warning-stroke);  stroke-width: 2; }
+  .s-inactive { fill: var(--inactive-fill); stroke: var(--inactive-stroke); stroke-width: 2; stroke-dasharray: 6 4; }
+  .s-code     { fill: var(--code-bg); stroke: none; }
+  .region     { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 5 5; }
+
+  /* Connectors and structural lines */
+  .edge       { fill: none; stroke: var(--primary-stroke); stroke-width: 2; }
+  .edge-thin  { fill: none; stroke: var(--line); stroke-width: 1.5; }
+  .structure  { fill: none; stroke: var(--line); stroke-width: 1.5; }
+  .t-strong   { font: 600 15px var(--sans); fill: var(--text-on-light); }
+  .t-tag      { font: 600 12px var(--sans); }
+  .halo       { paint-order: stroke; stroke: #fff; stroke-width: 4px; }
+  .dot        { fill: var(--primary-fill); }
+  .c-key      { fill: #93c5fd; }  .c-str { fill: #e2e8f0; }  .c-dim { fill: #94a3b8; }
+  .c-head     { fill: #c4b5fd; }  .c-ok  { fill: var(--code-data); }
+  .bar-meta   { fill: var(--start-fill); stroke: var(--start-stroke); stroke-width: 1; }
+  .bar-skill  { fill: var(--ai-fill); stroke: var(--ai-stroke); stroke-width: 1; }
+  .bar-ref    { fill: var(--tertiary-fill); stroke: var(--primary-stroke); stroke-width: 1; }
+  .bar-out    { fill: var(--end-fill); stroke: var(--end-stroke); stroke-width: 1; }
+</style>
+</head>
+<body>
+<!--
+  Plan: summary timeline on top (3 moments) -> three regions, one per loading level
+  (code sample | doc outline | file tree + script run) -> context-window bars at the bottom.
+  Columns: A 40-420 (center 230) | B 460-840 (650) | C 880-1260 (1070). Regions y 180-610.
+  Bars: 1px = 10 tokens, starting at x 200. Token counts = characters / 4 of this skill's files.
+-->
+<svg id="diagram" viewBox="0 0 1300 860" width="1300" height="860" role="img" aria-labelledby="diagram-title">
+  <title id="diagram-title">A Claude Code skill loads in three levels: its name and description are always in context, the SKILL.md body loads when a request matches, and bundled files load only when needed, with scripts run rather than read.</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerUnits="userSpaceOnUse"
+            markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1e3a5f"/>
+    </marker>
+  </defs>
+
+  <text class="t-title" x="40" y="50">How a Claude Code skill loads: progressive disclosure</text>
+  <text class="t-body" x="40" y="78">Example: this html-diagram skill. Each level enters the context window only when the one before it calls for it.</text>
+
+  <!-- Level 1 of zoom: summary timeline, dots aligned with the three columns -->
+  <line class="structure" x1="230" y1="122" x2="1070" y2="122"/>
+  <circle class="dot" cx="230"  cy="122" r="8"/>
+  <circle class="dot" cx="650"  cy="122" r="8"/>
+  <circle class="dot" cx="1070" cy="122" r="8"/>
+  <text class="t-strong" x="230"  y="152" text-anchor="middle">1 · session starts</text>
+  <text class="t-strong" x="650"  y="152" text-anchor="middle">2 · a request matches the description</text>
+  <text class="t-strong" x="1070" y="152" text-anchor="middle">3 · the task needs a bundled file</text>
+
+  <!-- ===== Section A: metadata ===== -->
+  <g data-region="level1" id="sec-level1">
+    <rect class="region" x="40" y="180" width="380" height="430" rx="10"/>
+    <text class="t-subtitle" x="60" y="212">Level 1 · Metadata</text>
+    <text class="t-body" x="60" y="236">always loaded · ≈85 tokens per installed skill</text>
+
+    <g data-node="frontmatter">
+      <rect class="s-code" x="60" y="256" width="340" height="136" rx="6"/>
+      <text class="t-code" x="76" y="280">
+        <tspan x="76" class="c-dim">---</tspan>
+        <tspan x="76" dy="20"><tspan class="c-key">name:</tspan> html-diagram</tspan>
+        <tspan x="76" dy="20"><tspan class="c-key">description:</tspan> Create diagrams</tspan>
+        <tspan x="76" dy="20">  as self-contained HTML files</tspan>
+        <tspan x="76" dy="20">  with inline SVG that make ...</tspan>
+        <tspan x="76" dy="20" class="c-dim">---</tspan>
+      </text>
+    </g>
+
+    <g data-node="match">
+      <polygon class="s-decision" points="230,420 350,470 230,520 110,470"/>
+      <text class="t-strong center" x="230" y="460">request matches</text>
+      <text class="t-strong center" x="230" y="480">description?</text>
+    </g>
+    <path data-edge data-from="frontmatter" data-to="match" class="edge" d="M230,392 L230,420" marker-end="url(#arrow)"/>
+    <text class="t-body" x="230" y="550" text-anchor="middle">no → only these ≈85 tokens</text>
+    <text class="t-body" x="230" y="570" text-anchor="middle">are ever spent on the skill</text>
+  </g>
+
+  <!-- ===== Section B: SKILL.md body ===== -->
+  <g data-region="level2" id="sec-level2">
+    <rect class="region" x="460" y="180" width="380" height="430" rx="10"/>
+    <text class="t-subtitle" x="480" y="212">Level 2 · SKILL.md body</text>
+    <text class="t-body" x="480" y="236">loaded on match · ≈6,750 tokens · 496 lines</text>
+
+    <g data-node="skillmd">
+      <rect class="s-code" x="480" y="256" width="340" height="232" rx="6"/>
+      <text class="t-code" x="496" y="282">
+        <tspan x="496" class="c-head"># HTML Diagram Creator</tspan>
+        <tspan x="496" dy="22" class="c-head">## Files in This Skill</tspan>
+        <tspan x="496" dy="22" class="c-head">## Two Decisions Already Made</tspan>
+        <tspan x="496" dy="22" class="c-head">## Core Philosophy</tspan>
+        <tspan x="496" dy="22" class="c-head">## Design Process</tspan>
+        <tspan x="496" dy="22" class="c-dim">   Step 2: … see references/</tspan>
+        <tspan x="496" dy="22" class="c-dim">   visual-patterns.md</tspan>
+        <tspan x="496" dy="22" class="c-head">## SVG Mechanics</tspan>
+        <tspan x="496" dy="22" class="c-head">## Render &amp; Validate</tspan>
+      </text>
+    </g>
+    <path data-edge data-from="match" data-to="skillmd" class="edge" d="M350,470 L480,470" marker-end="url(#arrow)"/>
+    <text class="t-strong halo" x="440" y="460" text-anchor="middle">yes</text>
+    <text class="t-body" x="480" y="520">The body names files by path. Nothing in</text>
+    <text class="t-body" x="480" y="540">them is loaded until Claude follows a path.</text>
+  </g>
+
+  <!-- ===== Section C: bundled files ===== -->
+  <g data-region="level3" id="sec-level3">
+    <rect class="region" x="880" y="180" width="380" height="430" rx="10"/>
+    <text class="t-subtitle" x="900" y="212">Level 3 · Bundled files</text>
+    <text class="t-body" x="900" y="236">only when the task needs one</text>
+
+    <!-- tree: trunk + branches + free-floating file names -->
+    <line class="structure" x1="910" y1="262" x2="910" y2="400"/>
+    <line class="structure" x1="910" y1="272" x2="924" y2="272"/>
+    <line class="structure" x1="910" y1="304" x2="924" y2="304"/>
+    <line class="structure" x1="910" y1="336" x2="924" y2="336"/>
+    <line class="structure" x1="910" y1="368" x2="924" y2="368"/>
+    <line class="structure" x1="910" y1="400" x2="924" y2="400"/>
+    <text class="t-code" x="932" y="276" style="fill:#374151">references/color-palette.md</text>
+    <text class="t-code" x="932" y="308" style="fill:#374151">references/visual-patterns.md</text>
+    <text class="t-code" x="932" y="340" style="fill:#374151">references/starter.html</text>
+    <text class="t-code" x="932" y="372" style="fill:#374151">examples/*.html</text>
+    <text class="t-code" x="932" y="404" style="fill:#374151">scripts/render.py</text>
+    <text class="t-tag" x="1240" y="276" text-anchor="end" style="fill:#1e40af">read · ≈630</text>
+    <text class="t-tag" x="1240" y="308" text-anchor="end" style="fill:#1e40af">read · ≈590</text>
+    <text class="t-tag" x="1240" y="340" text-anchor="end" style="fill:#1e40af">read · ≈1,350</text>
+    <text class="t-tag" x="1240" y="372" text-anchor="end" style="fill:#64748b">read if useful</text>
+    <text class="t-tag" x="1240" y="404" text-anchor="end" style="fill:#047857">run, not read</text>
+
+    <path class="edge" d="M820,272 L904,272" marker-end="url(#arrow)"/>
+
+    <g data-node="run">
+      <rect class="s-code" x="900" y="440" width="340" height="96" rx="6"/>
+      <text class="t-code" x="916" y="466">
+        <tspan x="916" class="c-dim">$ uv run scripts/render.py d.html</tspan>
+        <tspan x="916" dy="22">d.png</tspan>
+        <tspan x="916" dy="22" class="c-ok">lint: 0 error(s), 0 warning(s)</tspan>
+      </text>
+    </g>
+    <path data-edge data-to="run" class="edge" d="M1000,412 L1000,440" marker-end="url(#arrow)"/>
+    <text class="t-body" x="900" y="566">≈3,300 tokens of script stay on disk;</text>
+    <text class="t-body" x="900" y="586">only these three lines enter context.</text>
+  </g>
+
+  <!-- ===== Bottom: what the context window holds (1px = 10 tokens) ===== -->
+  <text class="t-subtitle" x="40" y="660">What the context window holds</text>
+  <text class="t-body" x="400" y="660">bar length ∝ tokens (≈ characters ÷ 4)</text>
+
+  <text class="t-body" x="40" y="701">after level 1</text>
+  <rect class="bar-meta" x="200" y="686" width="9" height="20"/>
+  <text class="t-body" x="219" y="701">≈85</text>
+
+  <text class="t-body" x="40" y="741">after level 2</text>
+  <rect class="bar-meta"  x="200" y="726" width="9"   height="20"/>
+  <rect class="bar-skill" x="209" y="726" width="675" height="20"/>
+  <text class="t-body" x="894" y="741">≈6,840</text>
+
+  <text class="t-body" x="40" y="781">after level 3</text>
+  <rect class="bar-meta"  x="200" y="766" width="9"   height="20"/>
+  <rect class="bar-skill" x="209" y="766" width="675" height="20"/>
+  <rect class="bar-ref"   x="884" y="766" width="257" height="20"/>
+  <rect class="bar-out"   x="1141" y="766" width="4"  height="20"/>
+  <text class="t-body" x="1155" y="781">≈9,440</text>
+
+  <!-- legend -->
+  <rect class="bar-meta"  x="200" y="812" width="14" height="14"/><text class="t-body" x="222" y="824">metadata</text>
+  <rect class="bar-skill" x="320" y="812" width="14" height="14"/><text class="t-body" x="342" y="824">SKILL.md body</text>
+  <rect class="bar-ref"   x="480" y="812" width="14" height="14"/><text class="t-body" x="502" y="824">references read</text>
+  <rect class="bar-out"   x="650" y="812" width="14" height="14"/><text class="t-body" x="672" y="824">script output (≈30)</text>
+</svg>
+</body>
+</html>

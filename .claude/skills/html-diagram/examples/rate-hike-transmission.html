@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rate Hike Transmission</title>
+<style>
+  /* Tokens: copied from references/color-palette.md. Edit there first, then here. */
+  :root {
+    --primary-fill: #3b82f6;   --primary-stroke: #1e3a5f;
+    --secondary-fill: #60a5fa; --tertiary-fill: #93c5fd;
+    --start-fill: #fed7aa;     --start-stroke: #c2410c;
+    --end-fill: #a7f3d0;       --end-stroke: #047857;
+    --warning-fill: #fee2e2;   --warning-stroke: #dc2626;
+    --decision-fill: #fef3c7;  --decision-stroke: #b45309;
+    --ai-fill: #ddd6fe;        --ai-stroke: #6d28d9;
+    --inactive-fill: #dbeafe;  --inactive-stroke: #1e40af;
+    --error-fill: #fecaca;     --error-stroke: #b91c1c;
+    --text-title: #1e40af;     --text-subtitle: #3b82f6;
+    --text-body: #64748b;      --text-on-light: #374151;  --text-on-dark: #ffffff;
+    --code-bg: #1e293b;        --code-data: #22c55e;
+    --line: #64748b;           --canvas: #ffffff;
+    --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  }
+  body { margin: 0; padding: 32px; background: var(--canvas); font-family: var(--sans); }
+  svg#diagram { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+
+  /* Text hierarchy */
+  .t-title    { font: 600 26px var(--sans); fill: var(--text-title); }
+  .t-subtitle { font: 600 17px var(--sans); fill: var(--text-subtitle); }
+  .t-body     { font: 400 14px var(--sans); fill: var(--text-body); }
+  .t-label    { font: 500 15px var(--sans); fill: var(--text-on-light); }
+  .t-code     { font: 400 13px var(--mono); fill: #e2e8f0; }
+  .t-code tspan { white-space: pre; } /* keeps indentation inside a line, not the markup between lines */
+  .on-dark    { fill: var(--text-on-dark); }
+  .center     { text-anchor: middle; dominant-baseline: central; }
+
+  /* Semantic shapes: fill + darker stroke */
+  .s-primary  { fill: var(--primary-fill);  stroke: var(--primary-stroke);  stroke-width: 2; }
+  .s-secondary{ fill: var(--secondary-fill); stroke: var(--primary-stroke); stroke-width: 2; }
+  .s-tertiary { fill: var(--tertiary-fill); stroke: var(--primary-stroke); stroke-width: 2; }
+  .s-start    { fill: var(--start-fill);    stroke: var(--start-stroke);    stroke-width: 2; }
+  .s-end      { fill: var(--end-fill);      stroke: var(--end-stroke);      stroke-width: 2; }
+  .s-decision { fill: var(--decision-fill); stroke: var(--decision-stroke); stroke-width: 2; }
+  .s-ai       { fill: var(--ai-fill);       stroke: var(--ai-stroke);       stroke-width: 2; }
+  .s-warning  { fill: var(--warning-fill);  stroke: var(--warning-stroke);  stroke-width: 2; }
+  .s-inactive { fill: var(--inactive-fill); stroke: var(--inactive-stroke); stroke-width: 2; stroke-dasharray: 6 4; }
+  .s-code     { fill: var(--code-bg); stroke: none; }
+  .region     { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 5 5; }
+
+  /* Connectors and structural lines */
+  .edge       { fill: none; stroke: var(--primary-stroke); stroke-width: 2; }
+  .edge-thin  { fill: none; stroke: var(--line); stroke-width: 1.5; }
+  .structure  { fill: none; stroke: var(--line); stroke-width: 1.5; }
+  .t-small    { font: 400 13px var(--sans); fill: var(--text-on-light); }
+  .t-strong   { font: 600 15px var(--sans); fill: var(--text-on-light); }
+  .dashed     { stroke-dasharray: 7 5; }
+  .halo       { paint-order: stroke; stroke: #fff; stroke-width: 4px; }
+  .dot        { fill: var(--primary-fill); }
+</style>
+</head>
+<body>
+<!--
+  Plan: fan-out (one decision -> five channels) then convergence (channels -> demand -> inflation).
+  The expectations channel also bypasses demand (dashed). A lag timeline sits underneath.
+  Columns: start cx 150 | channels x 360-660 | demand x 760-930 | inflation cx 1060
+  Channel rows (centers): 150 245 340 435 530
+-->
+<svg id="diagram" viewBox="0 0 1160 680" width="1160" height="680" role="img" aria-labelledby="diagram-title">
+  <title id="diagram-title">A policy rate hike fans out through five transmission channels that converge on aggregate demand and then inflation; expectations also act on prices directly, and all of it works with long lags.</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerUnits="userSpaceOnUse"
+            markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1e3a5f"/>
+    </marker>
+    <marker id="arrow-start" viewBox="0 0 10 10" refX="10" refY="5" markerUnits="userSpaceOnUse"
+            markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/>
+    </marker>
+  </defs>
+
+  <text class="t-title" x="40" y="50">How a rate hike reaches inflation</text>
+  <text class="t-body" x="40" y="78">One decision fans out through five channels, which converge on demand. Expectations also take a shortcut.</text>
+
+  <!-- Hero: the decision -->
+  <g data-node="hike">
+    <ellipse class="s-start" cx="150" cy="340" rx="110" ry="60"/>
+    <text class="t-strong center" x="150" y="328">Central bank</text>
+    <text class="t-strong center" x="150" y="352">raises policy rate</text>
+  </g>
+
+  <text class="t-subtitle center" x="510" y="104">Five channels</text>
+
+  <g data-node="ch-rate">
+    <rect class="s-tertiary" x="360" y="119" width="300" height="62" rx="8"/>
+    <text class="t-strong center" x="510" y="139">Interest-rate channel</text>
+    <text class="t-small center" x="510" y="161">borrowing costs more → investment ↓</text>
+  </g>
+  <g data-node="ch-credit">
+    <rect class="s-tertiary" x="360" y="214" width="300" height="62" rx="8"/>
+    <text class="t-strong center" x="510" y="234">Credit channel</text>
+    <text class="t-small center" x="510" y="256">banks lend less, to fewer borrowers</text>
+  </g>
+  <g data-node="ch-assets">
+    <rect class="s-tertiary" x="360" y="309" width="300" height="62" rx="8"/>
+    <text class="t-strong center" x="510" y="329">Asset-price channel</text>
+    <text class="t-small center" x="510" y="351">stocks and homes fall → wealth effect</text>
+  </g>
+  <g data-node="ch-fx">
+    <rect class="s-tertiary" x="360" y="404" width="300" height="62" rx="8"/>
+    <text class="t-strong center" x="510" y="424">Exchange-rate channel</text>
+    <text class="t-small center" x="510" y="446">currency rises → net exports ↓</text>
+  </g>
+  <g data-node="ch-expect">
+    <rect class="s-tertiary" x="360" y="499" width="300" height="62" rx="8"/>
+    <text class="t-strong center" x="510" y="519">Expectations channel</text>
+    <text class="t-small center" x="510" y="541">credible bank anchors future prices</text>
+  </g>
+
+  <!-- Fan-out: all from the decision's right tip -->
+  <path data-edge data-from="hike" data-to="ch-rate"   class="edge" stroke="#c2410c" style="stroke:#c2410c" d="M260,340 L360,150" marker-end="url(#arrow-start)"/>
+  <path data-edge data-from="hike" data-to="ch-credit" class="edge" style="stroke:#c2410c" d="M260,340 L360,245" marker-end="url(#arrow-start)"/>
+  <path data-edge data-from="hike" data-to="ch-assets" class="edge" style="stroke:#c2410c" d="M260,340 L360,340" marker-end="url(#arrow-start)"/>
+  <path data-edge data-from="hike" data-to="ch-fx"     class="edge" style="stroke:#c2410c" d="M260,340 L360,435" marker-end="url(#arrow-start)"/>
+  <path data-edge data-from="hike" data-to="ch-expect" class="edge" style="stroke:#c2410c" d="M260,340 L360,530" marker-end="url(#arrow-start)"/>
+
+  <!-- Convergence on demand -->
+  <g data-node="demand">
+    <rect class="s-primary" x="760" y="300" width="170" height="80" rx="8"/>
+    <text class="t-strong on-dark center" x="845" y="328">Aggregate</text>
+    <text class="t-strong on-dark center" x="845" y="352">demand ↓</text>
+  </g>
+  <path data-edge data-from="ch-rate"   data-to="demand" class="edge" d="M660,150 L760,312" marker-end="url(#arrow)"/>
+  <path data-edge data-from="ch-credit" data-to="demand" class="edge" d="M660,245 L760,326" marker-end="url(#arrow)"/>
+  <path data-edge data-from="ch-assets" data-to="demand" class="edge" d="M660,340 L760,340" marker-end="url(#arrow)"/>
+  <path data-edge data-from="ch-fx"     data-to="demand" class="edge" d="M660,435 L760,354" marker-end="url(#arrow)"/>
+  <path data-edge data-from="ch-expect" data-to="demand" class="edge" d="M660,530 L760,368" marker-end="url(#arrow)"/>
+
+  <g data-node="inflation">
+    <ellipse class="s-end" cx="1060" cy="340" rx="75" ry="45"/>
+    <text class="t-strong center" x="1060" y="340">Inflation ↓</text>
+  </g>
+  <path data-edge data-from="demand" data-to="inflation" class="edge" d="M930,340 L985,340" marker-end="url(#arrow)"/>
+
+  <!-- The shortcut: expectations act on price- and wage-setting directly -->
+  <path data-edge data-from="ch-expect" data-to="inflation" class="edge dashed" d="M660,530 L1060,530 L1060,385" marker-end="url(#arrow)"/>
+  <text class="t-body halo" x="870" y="518" text-anchor="middle">price and wage setters adjust directly</text>
+
+  <!-- Lag timeline -->
+  <text class="t-subtitle" x="40" y="621">Long and variable lags</text>
+  <line class="structure" x1="360" y1="615" x2="1050" y2="615"/>
+  <circle class="dot" cx="360"  cy="615" r="7"/>
+  <circle class="dot" cx="590"  cy="615" r="7"/>
+  <circle class="dot" cx="820"  cy="615" r="7"/>
+  <circle class="dot" cx="1050" cy="615" r="7"/>
+  <text class="t-body" x="360"  y="648" text-anchor="middle">decision</text>
+  <text class="t-body" x="590"  y="648" text-anchor="middle">markets reprice: days</text>
+  <text class="t-body" x="820"  y="648" text-anchor="middle">spending slows: quarters</text>
+  <text class="t-body" x="1050" y="648" text-anchor="middle">inflation peak effect: ~1–2 years</text>
+</svg>
+</body>
+</html>
